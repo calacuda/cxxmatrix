@@ -1,53 +1,53 @@
-#include <cstdio>
-#include <cstdint>
-#include <cstddef>
+#include <cassert>
+#include <cctype>
+#include <cmath>
 #include <csignal>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <cassert>
-#include <cmath>
-#include <cctype>
 
-#include <vector>
 #include <algorithm>
-#include <iterator>
-#include <unordered_map>
 #include <chrono>
-#include <thread>
 #include <functional>
+#include <iterator>
+#include <thread>
 #include <unistd.h>
+#include <unordered_map>
+#include <vector>
 
+#include "conway.hpp"
 #include "cxxmatrix.hpp"
 #include "mandel.hpp"
-#include "conway.hpp"
 
 namespace cxxmatrix {
-  // term_*.cpp
-  void term_init();
-  bool term_get_size(int& cols, int&rows);
-  void term_enter();
-  void term_leave();
-  std::ptrdiff_t term_read(byte* buffer, std::size_t size);
+// term_*.cpp
+void term_init();
+bool term_get_size(int &cols, int &rows);
+void term_enter();
+void term_leave();
+std::ptrdiff_t term_read(byte *buffer, std::size_t size);
 
-  bool term_winsize_from_env(int& cols, int& rows) {
-    int int_cols = -1, int_rows = -1;
-    if (const char* const env_cols = std::getenv("COLUMNS"))
-      int_cols = std::atoi(env_cols);
-    if (const char* const env_rows = std::getenv("LINES"))
-      int_rows = std::atoi(env_rows);
-    if (int_cols > 0 && int_rows > 0) {
-      cols = int_cols;
-      rows = int_rows;
-      return true;
-    } else
-      return false;
-  }
+bool term_winsize_from_env(int &cols, int &rows) {
+  int int_cols = -1, int_rows = -1;
+  if (const char *const env_cols = std::getenv("COLUMNS"))
+    int_cols = std::atoi(env_cols);
+  if (const char *const env_rows = std::getenv("LINES"))
+    int_rows = std::atoi(env_rows);
+  if (int_cols > 0 && int_rows > 0) {
+    cols = int_cols;
+    rows = int_rows;
+    return true;
+  } else
+    return false;
 }
+} // namespace cxxmatrix
 
 namespace cxxmatrix::config {
-  constexpr std::chrono::milliseconds default_frame_interval {40};
-  constexpr int default_decay = 100; // 既定の寿命
-}
+constexpr std::chrono::milliseconds default_frame_interval{40};
+constexpr int default_decay = 100; // 既定の寿命
+} // namespace cxxmatrix::config
 
 namespace cxxmatrix {
 
@@ -58,17 +58,20 @@ static color_t index2color(byte index) {
   byte r, g, b;
   if (index < 16) {
     int const mx = index < 8 ? 0x80 : 0xFF;
-    r = mx * (1 & index    );
+    r = mx * (1 & index);
     g = mx * (1 & index / 2);
     b = mx * (1 & index / 4);
   } else if (index < 232) {
     index -= 16;
-    r = index / 36    ;
-    g = index / 6  % 6;
-    b = index      % 6;
-    if (r) r = r * 40 + 55;
-    if (g) g = g * 40 + 55;
-    if (b) b = b * 40 + 55;
+    r = index / 36;
+    g = index / 6 % 6;
+    b = index % 6;
+    if (r)
+      r = r * 40 + 55;
+    if (g)
+      g = g * 40 + 55;
+    if (b)
+      b = b * 40 + 55;
   } else {
     r = g = b = 8 + 10 * (index - 232);
   }
@@ -76,17 +79,16 @@ static color_t index2color(byte index) {
 }
 
 enum colorspace_t {
-  colorspace_ansi_8          = 11,
-  colorspace_aix_16          = 12,
-  colorspace_xterm_88        = 101,
-  colorspace_xterm_256       = 102,
-  colorspace_xterm_rgb       = 103,
-  colorspace_iso8613_6_rgb   = 2,
-  colorspace_iso8613_6_cmy   = 3,
-  colorspace_iso8613_6_cmyk  = 4,
+  colorspace_ansi_8 = 11,
+  colorspace_aix_16 = 12,
+  colorspace_xterm_88 = 101,
+  colorspace_xterm_256 = 102,
+  colorspace_xterm_rgb = 103,
+  colorspace_iso8613_6_rgb = 2,
+  colorspace_iso8613_6_cmy = 3,
+  colorspace_iso8613_6_cmyk = 4,
   colorspace_iso8613_6_index = 5,
 };
-
 
 struct frame_scheduler {
   using clock_type = std::chrono::high_resolution_clock;
@@ -119,12 +121,12 @@ enum cell_flags {
 
 struct cell_t {
   char32_t c = U' ';
-  int birth = 0; // 設置時刻
-  double power = 0; // 初期の明るさ
+  int birth = 0;                        // 設置時刻
+  double power = 0;                     // 初期の明るさ
   double decay = config::default_decay; // 寿命
   std::uint32_t flags = 0;
 
-  double stage = 0; // 現在の消滅段階 (0..1.0)
+  double stage = 0;         // 現在の消滅段階 (0..1.0)
   double current_power = 0; // 現在の明るさ(瞬き処理の前) (0..1.0)
 };
 
@@ -143,6 +145,7 @@ struct layer_t {
 
 private:
   int error_rate_modulo = 20;
+
 public:
   void set_error_rate(double value) {
     error_rate_modulo = value > 0.0 ? std::ceil(20 / value) : 0;
@@ -157,40 +160,39 @@ public:
     scrollx = 0;
     scrolly = 0;
   }
-  cell_t& cell(int x, int y) {
-    return content[y * cols + x];
-  }
-  cell_t& rcell(int x, int y) {
+  cell_t &cell(int x, int y) { return content[y * cols + x]; }
+  cell_t &rcell(int x, int y) {
     x = util::mod(x + scrollx, cols);
     y = util::mod(y + scrolly, rows);
     return cell(x, y);
   }
-  cell_t const& cell(int x, int y) const {
-    return const_cast<layer_t*>(this)->cell(x, y);
+  cell_t const &cell(int x, int y) const {
+    return const_cast<layer_t *>(this)->cell(x, y);
   }
-  cell_t const& rcell(int x, int y) const {
-    return const_cast<layer_t*>(this)->rcell(x, y);
+  cell_t const &rcell(int x, int y) const {
+    return const_cast<layer_t *>(this)->rcell(x, y);
   }
 
 public:
-  void add_thread(thread_t const& thread) {
+  void add_thread(thread_t const &thread) {
     threads.emplace_back(thread);
     threads.back().x += scrollx;
     threads.back().y += scrolly;
   }
   void step_threads(int now) {
     // remove out of range threads
-    threads.erase(
-      std::remove_if(threads.begin(), threads.end(),
-        [this] (auto const& pos) -> bool {
-          int const y = pos.y - scrolly;
-          return y < 0 || rows <= y;
-        }), threads.end());
+    threads.erase(std::remove_if(threads.begin(), threads.end(),
+                                 [this](auto const &pos) -> bool {
+                                   int const y = pos.y - scrolly;
+                                   return y < 0 || rows <= y;
+                                 }),
+                  threads.end());
 
     // grow threads
-    for (thread_t& pos : threads) {
+    for (thread_t &pos : threads) {
       if (pos.age++ % pos.speed == 0) {
-        cell_t& cell = this->cell(util::mod(pos.x, cols), util::mod(pos.y, rows));
+        cell_t &cell =
+            this->cell(util::mod(pos.x, cols), util::mod(pos.y, rows));
         cell.birth = now;
         cell.power = pos.power;
         cell.decay = pos.decay;
@@ -205,8 +207,9 @@ public:
   void resolve_level(int now) {
     for (int y = 0; y < rows; y++) {
       for (int x = 0; x < cols; x++) {
-        cell_t& cell = this->rcell(x, y);
-        if (cell.c == ' ') continue;
+        cell_t &cell = this->rcell(x, y);
+        if (cell.c == ' ')
+          continue;
 
         int const age = now - cell.birth;
         cell.stage = 1.0 - age / cell.decay;
@@ -226,10 +229,10 @@ public:
 typedef std::uint32_t key_t;
 
 enum key_flags {
-  key_up    = 0x110000,
-  key_down  = 0x110001,
+  key_up = 0x110000,
+  key_down = 0x110001,
   key_right = 0x110002,
-  key_left  = 0x110003,
+  key_left = 0x110003,
 };
 inline constexpr key_t key_ctrl(key_t k) { return k & 0x1F; }
 
@@ -241,19 +244,22 @@ struct key_reader {
 
 public:
   void leave() {
-    if (!term_internal) return;
+    if (!term_internal)
+      return;
     term_internal = false;
     term_leave();
   }
   void enter() {
-    if (term_internal) return;
+    if (term_internal)
+      return;
     term_internal = true;
     term_enter();
   }
 
 private:
   void process_key(key_t k) {
-    if (proc) proc(k);
+    if (proc)
+      proc(k);
   }
 
   bool esc = false;
@@ -265,13 +271,29 @@ private:
     if (esc) {
       if (0x40 <= b && b < 0x80) {
         switch (b) {
-        case 'A': esc = false; process_key(key_up   ); break;
-        case 'B': esc = false; process_key(key_down ); break;
-        case 'C': esc = false; process_key(key_right); break;
-        case 'D': esc = false; process_key(key_left ); break;
-        case '[': break;
-        case 'O': break;
-        default: esc = false; break;
+        case 'A':
+          esc = false;
+          process_key(key_up);
+          break;
+        case 'B':
+          esc = false;
+          process_key(key_down);
+          break;
+        case 'C':
+          esc = false;
+          process_key(key_right);
+          break;
+        case 'D':
+          esc = false;
+          process_key(key_left);
+          break;
+        case '[':
+          break;
+        case 'O':
+          break;
+        default:
+          esc = false;
+          break;
         }
       } else if (0x80 <= b) {
         process_key(0x1b);
@@ -282,6 +304,7 @@ private:
       process_key(b);
     }
   }
+
 public:
   void process() {
     byte buffer[1024];
@@ -293,16 +316,15 @@ public:
   }
 };
 
-
 enum scene_t {
-  scene_none         = 0,
-  scene_number       = 1,
-  scene_banner       = 2,
-  scene_rain         = 3,
-  scene_conway       = 4,
-  scene_mandelbrot   = 5,
+  scene_none = 0,
+  scene_number = 1,
+  scene_banner = 2,
+  scene_rain = 3,
+  scene_conway = 4,
+  scene_mandelbrot = 5,
   scene_rain_forever = 6,
-  scene_exit         = 7, // Exit (menu)
+  scene_exit = 7, // Exit (menu)
   scene_loop = 99,
 
   scene_count = 7,
@@ -314,6 +336,7 @@ private:
   bool setting_twinkle_enabled = true;
   bool setting_preserve_background = false;
   double setting_rain_interval = 150;
+
 public:
   void set_diffuse_enabled(bool value) {
     this->setting_diffuse_enabled = value;
@@ -325,15 +348,14 @@ public:
   void set_preserve_background(bool value) {
     this->setting_preserve_background = value;
   }
-  void set_rain_density(double value) {
-    setting_rain_interval = 150 / value;
-  }
+  void set_rain_density(double value) { setting_rain_interval = 150 / value; }
 
 private:
   layer_t layers[3];
+
 public:
   void set_error_rate(double value) {
-    for (auto& layer : layers)
+    for (auto &layer : layers)
       layer.set_error_rate(value);
   }
 
@@ -341,11 +363,12 @@ private:
   int cols = 80, rows = 25;
   std::vector<tcell_t> old_content;
   std::vector<tcell_t> new_content;
-  std::FILE* file;
+  std::FILE *file;
 
 private:
   bool flag_sigint = false;
   bool flag_winch = false;
+
 public:
   void notify_sigint() { flag_sigint = true; }
   void notify_winch() { flag_winch = true; }
@@ -369,22 +392,22 @@ private:
     process_signals();
     scheduler.next_frame();
   }
+
 public:
   void set_frame_rate(double frame_rate) {
     using msec_rep = std::chrono::milliseconds::rep;
     constexpr msec_rep max_frame_interval = 1000 * 3600;
 
     double const frame_interval = 1000 / frame_rate;
-    scheduler.frame_interval = std::chrono::milliseconds((msec_rep) std::clamp(frame_interval, 1.0, (double) max_frame_interval));
+    scheduler.frame_interval = std::chrono::milliseconds(
+        (msec_rep)std::clamp(frame_interval, 1.0, (double)max_frame_interval));
   }
 
 public:
   key_reader kreader;
 
 public:
-  buffer() {
-    initialize_color_table(index2color(47), colorspace_xterm_256);
-  }
+  buffer() { initialize_color_table(index2color(47), colorspace_xterm_256); }
 
 private:
   void put_utf8(char32_t uc) {
@@ -416,20 +439,20 @@ private:
     bg = -1;
     bold = false;
   }
-  void set_color(tcell_t const& tcell) {
+  void set_color(tcell_t const &tcell) {
     if (tcell.bg != this->bg) {
       this->bg = tcell.bg;
       if (setting_preserve_background && this->bg == level_background)
         std::fprintf(file, "\x1b[49m");
       else {
-        auto const& seq = setbg_table[this->bg];
+        auto const &seq = setbg_table[this->bg];
         std::fwrite(seq.data(), seq.size(), 1, file);
       }
     }
     if (tcell.c != ' ') {
       if (tcell.fg != fg) {
         this->fg = tcell.fg;
-        auto const& seq = setfg_table[this->fg];
+        auto const &seq = setfg_table[this->fg];
         std::fwrite(seq.data(), seq.size(), 1, file);
       }
       if (tcell.bold != bold) {
@@ -458,7 +481,8 @@ private:
     }
 
     // \v が思うように動いていない?
-    // if (x <= px && py < y && (x == 0 ? 1 : px - x) + (y - py) <= (x == 0 || x == px ? 3 : 5)) {
+    // if (x <= px && py < y && (x == 0 ? 1 : px - x) + (y - py) <= (x == 0 || x
+    // == px ? 3 : 5)) {
     //   if (x != px) {
     //     if (x == 0) {
     //       std::putc('\r', file);
@@ -494,16 +518,20 @@ private:
   }
 
 private:
-  static bool is_changed(tcell_t const& ncell, tcell_t const& ocell) {
-    if (ncell.c != ocell.c || ncell.bg != ocell.bg) return true;
-    if (ncell.c == ' ') return false;
-    if (ncell.fg != ocell.fg || ncell.bold != ocell.bold) return true;
+  static bool is_changed(tcell_t const &ncell, tcell_t const &ocell) {
+    if (ncell.c != ocell.c || ncell.bg != ocell.bg)
+      return true;
+    if (ncell.c == ' ')
+      return false;
+    if (ncell.fg != ocell.fg || ncell.bold != ocell.bold)
+      return true;
     return false;
   }
   bool term_draw_cell(int x, int y, std::size_t index, bool force_write) {
-    tcell_t& ncell = new_content[index];
-    tcell_t& ocell = old_content[index];
-    if (ncell.fg == ocell.bg) ncell.c = ' ';
+    tcell_t &ncell = new_content[index];
+    tcell_t &ocell = old_content[index];
+    if (ncell.fg == ocell.bg)
+      ncell.c = ' ';
     if (force_write || is_changed(ncell, ocell)) {
       goto_xy(x, y);
       set_color(ncell);
@@ -523,16 +551,16 @@ public:
         // 行末 xenl 対策
         if (y == rows - 1) {
           if (x == cols - 2) {
-            tcell_t const& cell = new_content[y * cols + x + 1];
+            tcell_t const &cell = new_content[y * cols + x + 1];
             set_color(cell);
             put_utf8(cell.c);
             std::fprintf(file, "\b\x1b[@");
-          } else if (x == cols -1) {
+          } else if (x == cols - 1) {
             continue;
           }
         }
 
-        tcell_t const& tcell = new_content[y * cols + x];
+        tcell_t const &tcell = new_content[y * cols + x];
         set_color(tcell);
         put_utf8(tcell.c);
       }
@@ -571,7 +599,7 @@ private:
     for (int y = 0; y < rows; y++) {
       for (int x = 0; x < cols; x++) {
         std::size_t const index = y * cols + x;
-        tcell_t& tcell = new_content[index];
+        tcell_t &tcell = new_content[index];
         tcell.diffuse = 0;
         tcell.bg = level_zero;
       }
@@ -580,7 +608,7 @@ private:
   void add_diffuse(int x, int y, double value) {
     if (0 <= y && y < rows && 0 <= x && x < cols && value > 0) {
       std::size_t const index = y * cols + x;
-      tcell_t& tcell = new_content[index];
+      tcell_t &tcell = new_content[index];
       tcell.diffuse += value;
     }
   }
@@ -588,7 +616,7 @@ private:
     for (int y = 0; y < rows; y++) {
       for (int x = 0; x < cols; x++) {
         std::size_t const index = y * cols + x;
-        tcell_t& tcell = new_content[index];
+        tcell_t &tcell = new_content[index];
         double const diffuse = std::min(0.04 * tcell.diffuse, 0.3);
         tcell.bg = intensity2level(diffuse);
       }
@@ -608,9 +636,7 @@ private:
     else
       m_twinkle_rendering = 0.0;
   }
-  void set_twinkle(double value) {
-    this->m_twinkle = value;
-  }
+  void set_twinkle(double value) { this->m_twinkle = value; }
 
 private:
   colorspace_t m_colorspace = colorspace_xterm_256;
@@ -620,7 +646,9 @@ private:
   const int level_background = 0;
   const int level_zero = 0;
   std::size_t level_count;
-  level_t intensity2level(double value) { return (level_t) ((level_count - 1) * value); }
+  level_t intensity2level(double value) {
+    return (level_t)((level_count - 1) * value);
+  }
 
   void initialize_palette_rgb(color_t color) {
     std::vector<color_t> colors;
@@ -634,9 +662,9 @@ private:
 
       // 最大128レベル (0..254)
       for (int i = 0; i <= mx; i += 2) {
-        byte const r = std::round(R * ((double) i / mx));
-        byte const g = std::round(G * ((double) i / mx));
-        byte const b = std::round(B * ((double) i / mx));
+        byte const r = std::round(R * ((double)i / mx));
+        byte const g = std::round(G * ((double)i / mx));
+        byte const b = std::round(B * ((double)i / mx));
         colors.push_back(r | g << 8 | b << 16);
       }
 
@@ -654,7 +682,7 @@ private:
     level_count = colors.size();
 
     char seq[256];
-    const char* fmt_sgr;
+    const char *fmt_sgr;
     switch (m_colorspace) {
     case colorspace_xterm_rgb:
       fmt_sgr = "\x1b[%c8;2;%d;%d;%dm";
@@ -665,7 +693,7 @@ private:
     rgb:
       setfg_table.clear();
       setbg_table.clear();
-      for (color_t color: colors) {
+      for (color_t color : colors) {
         if (color == 0) {
           setfg_table.push_back("\x1b[30m");
           setbg_table.push_back("\x1b[40m");
@@ -690,7 +718,7 @@ private:
     cmyk:
       setfg_table.clear();
       setbg_table.clear();
-      for (color_t color: colors) {
+      for (color_t color : colors) {
         if (color == 0) {
           setfg_table.push_back("\x1b[30m");
           setbg_table.push_back("\x1b[40m");
@@ -699,14 +727,17 @@ private:
           byte g = 0xFF & color >> 8;
           byte b = 0xFF & color >> 16;
           byte a = 0xFF;
-          if (m_colorspace == colorspace_iso8613_6_cmyk && (a = std::max({r, g, b}))) {
+          if (m_colorspace == colorspace_iso8613_6_cmyk &&
+              (a = std::max({r, g, b}))) {
             r = r * 255 / a;
             g = g * 255 / a;
             b = b * 255 / a;
           }
-          std::sprintf(seq, fmt_sgr, '3', 0xFF ^ r, 0xFF ^ g,  0xFF ^ b, 0xFF ^ a);
+          std::sprintf(seq, fmt_sgr, '3', 0xFF ^ r, 0xFF ^ g, 0xFF ^ b,
+                       0xFF ^ a);
           setfg_table.push_back(seq);
-          std::sprintf(seq, fmt_sgr, '4', 0xFF ^ r, 0xFF ^ g,  0xFF ^ b, 0xFF ^ a);
+          std::sprintf(seq, fmt_sgr, '4', 0xFF ^ r, 0xFF ^ g, 0xFF ^ b,
+                       0xFF ^ a);
           setbg_table.push_back(seq);
         }
       }
@@ -733,8 +764,8 @@ private:
       int const gray0 = 16 + L * L * L;
 
       // 6x6x6 cube / 4x4x4 cube
-      int const R = (int(0xFF & color      ) - offset) / modulo;
-      int const G = (int(0xFF & color >> 8 ) - offset) / modulo;
+      int const R = (int(0xFF & color) - offset) / modulo;
+      int const G = (int(0xFF & color >> 8) - offset) / modulo;
       int const B = (int(0xFF & color >> 16) - offset) / modulo;
       int const mx = std::max({R, G, B});
       int const mn = std::min({R, G, B});
@@ -764,14 +795,14 @@ private:
 
     level_count = indices.size();
 
-    const char* fmt_sgr = "\x1b[%c8;5;%dm";
+    const char *fmt_sgr = "\x1b[%c8;5;%dm";
     if (m_colorspace == colorspace_iso8613_6_index)
       fmt_sgr = "\x1b[%c8:5:%dm";
 
     char seq[100];
     setfg_table.clear();
     setbg_table.clear();
-    for (byte index: indices) {
+    for (byte index : indices) {
       if (index == 0 || index == 16) {
         setfg_table.push_back("\x1b[30m");
         setbg_table.push_back("\x1b[40m");
@@ -791,11 +822,9 @@ private:
       byte const G = 0xFF & color >> 8;
       byte const B = 0xFF & color >> 16;
       byte const M = std::max({R, G, B});
-      int c =
-        (R > M / 2 ? 1 : 0) +
-        (G > M / 2 ? 2 : 0) +
-        (B > M / 2 ? 4 : 0);
-      if (c == 0) c = 7;
+      int c = (R > M / 2 ? 1 : 0) + (G > M / 2 ? 2 : 0) + (B > M / 2 ? 4 : 0);
+      if (c == 0)
+        c = 7;
 
       indices.push_back(0);
       if (m_colorspace == colorspace_aix_16)
@@ -825,7 +854,7 @@ private:
     char seq[100];
     setfg_table.clear();
     setbg_table.clear();
-    for (byte index: indices) {
+    for (byte index : indices) {
       if (index < 8) {
         std::sprintf(seq, "\x1b[3%dm", index);
         setfg_table.push_back(seq);
@@ -868,7 +897,7 @@ public:
 
 private:
   void clear_content() {
-    for (auto& tcell: new_content) {
+    for (auto &tcell : new_content) {
       tcell.c = ' ';
       tcell.fg = level_zero;
       tcell.bg = level_zero;
@@ -876,13 +905,15 @@ private:
     }
   }
 
-  cell_t const* rend_cell(int x, int y, double& power) {
-    cell_t const* ret = nullptr;
-    for (auto& layer: layers) {
-      auto const& cell = layer.rcell(x, y);
+  cell_t const *rend_cell(int x, int y, double &power) {
+    cell_t const *ret = nullptr;
+    for (auto &layer : layers) {
+      auto const &cell = layer.rcell(x, y);
       if (cell.c != ' ') {
-        if (!ret) ret = &cell;
-        if (cell.current_power > power) power = cell.current_power;
+        if (!ret)
+          ret = &cell;
+        if (cell.current_power > power)
+          power = cell.current_power;
       }
     }
     return ret;
@@ -893,10 +924,10 @@ private:
     for (int y = 0; y < rows; y++) {
       for (int x = 0; x < cols; x++) {
         std::size_t const index = y * cols + x;
-        tcell_t& tcell = new_content[index];
+        tcell_t &tcell = new_content[index];
 
         double current_power = 0.0;
-        cell_t const* lcell = this->rend_cell(x, y, current_power);
+        cell_t const *lcell = this->rend_cell(x, y, current_power);
         if (!lcell) {
           tcell.c = ' ';
           continue;
@@ -906,22 +937,29 @@ private:
 
         // current_power = 現在の輝度 (瞬き)
         if (m_twinkle_rendering != 0.0) {
-          current_power -= std::hypot(current_power * m_twinkle_rendering, 0.1) * util::randf();
-          if (current_power < 0.0) current_power = 0.0;
+          current_power -=
+              std::hypot(current_power * m_twinkle_rendering, 0.1) *
+              util::randf();
+          if (current_power < 0.0)
+            current_power = 0.0;
         }
 
         // level = 色番号
-        double const fractional_level = util::interpolate(current_power, 0.6, level_count);
+        double const fractional_level =
+            util::interpolate(current_power, 0.6, level_count);
         int level = fractional_level;
-        if (m_twinkle_rendering != 0.0 && util::randf() > fractional_level - level) level++;
+        if (m_twinkle_rendering != 0.0 &&
+            util::randf() > fractional_level - level)
+          level++;
         level = std::min<int>(level, level_count - 1);
 
         tcell.fg = level;
         tcell.bold = !(lcell->flags & cflag_disable_bold) && lcell->stage > 0.5;
 
-        if (!setting_diffuse_enabled) continue;
+        if (!setting_diffuse_enabled)
+          continue;
 
-        double const twinkle_power = (double) level / (level_count - 1);
+        double const twinkle_power = (double)level / (level_count - 1);
         double const p0 = ((1.0 / 0.3) * (twinkle_power - 0.0));
         double const p1 = ((1.0 / 0.3) * (twinkle_power - 0.3));
         double const p2 = ((1.0 / 0.5) * (twinkle_power - 0.7));
@@ -949,7 +987,7 @@ public:
   }
   void render_layers() {
     now++;
-    for (auto& layer: layers) {
+    for (auto &layer : layers) {
       layer.step_threads(now);
       layer.resolve_level(now);
     }
@@ -959,7 +997,8 @@ public:
 
   bool term_internal = false;
   void term_leave() {
-    if (!term_internal) return;
+    if (!term_internal)
+      return;
     term_internal = false;
     std::fprintf(file, "\x18"); // CAN
     std::fprintf(file, "\x1b[m\x1b[%dH\n", rows);
@@ -968,7 +1007,8 @@ public:
     kreader.leave();
   }
   void term_enter() {
-    if (term_internal) return;
+    if (term_internal)
+      return;
     term_internal = true;
     kreader.enter();
     std::fprintf(file, "\x1b[?1049h\x1b[?25l");
@@ -1006,20 +1046,17 @@ public:
   }
 
   void initialize() {
-    kreader.proc = [this] (key_t k) { this->process_key(k); };
+    kreader.proc = [this](key_t k) { this->process_key(k); };
     term_get_size(this->cols, this->rows);
     file = stdout;
     new_content.clear();
     new_content.resize(cols * rows);
 
-    for (auto& layer : layers)
+    for (auto &layer : layers)
       layer.resize(cols, rows);
   }
 
-  void finalize() {
-    this->term_leave();
-  }
-
+  void finalize() { this->term_leave(); }
 
 public:
   static double s3rain_scroll_func_tanh(double value) {
@@ -1036,9 +1073,7 @@ public:
       return th1 + (1.0 - th1 * th1) * (value - tanh_range);
     }
   }
-  static double s3rain_scroll_func_const(double) {
-    return 0.0;
-  }
+  static double s3rain_scroll_func_const(double) { return 0.0; }
 
 public:
   void s3rain(std::uint32_t nloop, double (*scroll_func)(double)) {
@@ -1054,7 +1089,7 @@ public:
 
     for (std::uint32_t loop = 0; nloop == 0 || loop < nloop; loop++) {
       // add new threads
-      if (now % (int) std::ceil(setting_rain_interval / cols) == 0) {
+      if (now % (int)std::ceil(setting_rain_interval / cols) == 0) {
         thread_t thread;
         thread.x = util::rand() % cols;
         thread.y = 0;
@@ -1079,14 +1114,16 @@ public:
       render_layers();
       next_frame();
       kreader.process();
-      if (is_menu) return;
+      if (is_menu)
+        return;
     }
     std::uint32_t const wait = 8 * rows + config::default_decay;
     for (std::uint32_t loop = 0; loop < wait; loop++) {
       render_layers();
       next_frame();
       kreader.process();
-      if (is_menu) return;
+      if (is_menu)
+        return;
     }
   }
 
@@ -1094,14 +1131,15 @@ private:
   void s1number_fill_numbers(int stripe) {
     for (int y = 0; y < rows; y++) {
       for (int x = 0; x < cols; x++) {
-        tcell_t& tcell = new_content[y * cols + x];
-        cell_t& cell = layers[1].rcell(x, y);
+        tcell_t &tcell = new_content[y * cols + x];
+        cell_t &cell = layers[1].rcell(x, y);
         if (stripe && x % stripe == 0) {
           cell.c = ' ';
           tcell.c = ' ';
         } else {
           cell.c = U'0' + util::rand() % 10;
-          cell.birth = now - std::round((0.5 + 0.1 * util::randf()) * config::default_decay);
+          cell.birth = now - std::round((0.5 + 0.1 * util::randf()) *
+                                        config::default_decay);
           cell.power = 1.0;
           cell.decay = config::default_decay;
           cell.flags = cflag_disable_bold;
@@ -1116,25 +1154,27 @@ public:
   void s1number() {
     clear_content();
     int stripe_periods[] = {0, 32, 16, 8, 4, 2, 2, 2};
-    for (int stripe: stripe_periods) {
+    for (int stripe : stripe_periods) {
       for (int i = 0; i < 20; i++) {
         s1number_fill_numbers(stripe);
         render_direct();
         next_frame();
         kreader.process();
-        if (is_menu) return;
+        if (is_menu)
+          return;
       }
     }
   }
 
 private:
-  static void s2banner_decode(std::vector<char32_t>& msg, const char* msg_u8) {
+  static void s2banner_decode(std::vector<char32_t> &msg, const char *msg_u8) {
     while (msg.size() < s2banner_max_message_size && *msg_u8) {
-      std::uint32_t code = (byte) *msg_u8++;
+      std::uint32_t code = (byte)*msg_u8++;
       int remain;
       std::uint32_t min_code;
       if (code < 0xC0) {
-        if (code >= 0x80) goto error_char;
+        if (code >= 0x80)
+          goto error_char;
         remain = 0;
         min_code = 0;
       } else if (code < 0xE0) {
@@ -1156,10 +1196,12 @@ private:
         goto error_char;
       }
 
-      if (remain) code &= (1 << (6 - remain)) - 1;
-      while (remain-- && 0x80 <= (byte) *msg_u8 && (byte) *msg_u8 < 0xC0)
+      if (remain)
+        code &= (1 << (6 - remain)) - 1;
+      while (remain-- && 0x80 <= (byte)*msg_u8 && (byte)*msg_u8 < 0xC0)
         code = code << 6 | (*msg_u8++ & 0x3F);
-      if (code < min_code) goto error_char;
+      if (code < min_code)
+        goto error_char;
       msg.push_back(code);
       continue;
     error_char:
@@ -1174,18 +1216,15 @@ private:
     int w;
     int lines[height];
 
-    bool operator()(int x, int y) const {
-      return lines[y] & (1 << x);
-    }
+    bool operator()(int x, int y) const { return lines[y] & (1 << x); }
   };
   struct glyph_t {
     int h, w;
     int render_width;
-    glyph_definition_t const* def;
+    glyph_definition_t const *def;
+
   public:
-    bool operator()(int x, int y) const {
-      return def && (*def)(x, y);
-    }
+    bool operator()(int x, int y) const { return def && (*def)(x, y); }
   };
 
   static constexpr int s2banner_initial_input = 40;
@@ -1203,13 +1242,13 @@ private:
     int min_progress = 0; // 最小の文字表示幅
 
   private:
-    static glyph_definition_t const* glyph_data(char32_t c) {
+    static glyph_definition_t const *glyph_data(char32_t c) {
       static glyph_definition_t glyph_defs[] = {
 #include "glyph.inl"
       };
-      static std::unordered_map<char32_t, glyph_definition_t const*> map;
+      static std::unordered_map<char32_t, glyph_definition_t const *> map;
       if (map.empty()) {
-        for (auto const& def : glyph_defs)
+        for (auto const &def : glyph_defs)
           map[def.c] = &def;
       }
       auto it = map.find(c);
@@ -1217,15 +1256,16 @@ private:
         it = map.find(U'\uFFFD');
       return it != map.end() ? it->second : nullptr;
     }
+
   public:
-    void set_text(const char* msg) {
+    void set_text(const char *msg) {
       text.clear();
       s2banner_decode(text, msg);
     }
     void resolve_glyph() {
       glyphs.clear();
       this->min_width = 0;
-      for (char32_t c: text) {
+      for (char32_t c : text) {
         if (U'a' <= c && c <= U'z')
           c = c - U'a' + U'A';
 
@@ -1235,7 +1275,8 @@ private:
         g.w = g.def ? g.def->w : 5;
         g.render_width = g.w + 1;
 
-        if (glyphs.size()) this->min_width++;
+        if (glyphs.size())
+          this->min_width++;
         this->min_width += g.w;
         glyphs.push_back(g);
       }
@@ -1247,12 +1288,13 @@ private:
       this->render_width = this->min_width;
 
       // No need to adjust the widths of glyphs when there are no glyphs
-      if (glyphs.empty()) return;
+      if (glyphs.empty())
+        return;
 
       while (rest > 0) {
         int min_progress = glyphs[0].render_width;
         int min_progress_count = 0;
-        for (glyph_t const& g: glyphs) {
+        for (glyph_t const &g : glyphs) {
           if (g.render_width < min_progress) {
             min_progress = g.render_width;
             min_progress_count = 1;
@@ -1261,12 +1303,15 @@ private:
           }
         }
 
-        if (min_progress >= s2banner_cell_width * 3 / 2) break;
+        if (min_progress >= s2banner_cell_width * 3 / 2)
+          break;
         rest -= min_progress_count;
-        if (rest < 0) break;
+        if (rest < 0)
+          break;
 
-        for (glyph_t& g: glyphs)
-          if (g.render_width == min_progress) g.render_width++;
+        for (glyph_t &g : glyphs)
+          if (g.render_width == min_progress)
+            g.render_width++;
         this->render_width += min_progress_count;
         this->min_progress = min_progress;
       }
@@ -1277,7 +1322,7 @@ private:
     std::vector<banner_message_t> data;
 
   public:
-    void add_message(std::string const& msg) {
+    void add_message(std::string const &msg) {
       banner_message_t message;
       message.set_text(msg.c_str());
       message.resolve_glyph();
@@ -1289,48 +1334,55 @@ private:
   public:
     int max_min_width() const {
       int width = 0;
-      for (auto const& message: data)
+      for (auto const &message : data)
         width = std::max(width, message.min_width);
       return width;
     }
     int max_number_of_characters() const {
       std::size_t nchar = 0;
-      for (auto const& message: data)
+      for (auto const &message : data)
         nchar = std::max(nchar, message.text.size());
-      return (int) nchar;
+      return (int)nchar;
     }
   };
 
   banner_t banner;
 
-  void s2banner_write_letter(int x0, int y0, glyph_t const& glyph, int type) {
+  void s2banner_write_letter(int x0, int y0, glyph_t const &glyph, int type) {
     x0 += (glyph.render_width - 1 - glyph.w) / 2;
     for (int y = 0; y < glyph.h; y++) {
-      if (y0 + y >= rows) continue;
+      if (y0 + y >= rows)
+        continue;
       for (int x = 0; x < glyph.w; x++) {
-        if (x0 + x >= cols) continue;
-        if (glyph(x, y)) s2banner_set_char(x0, y0, x, y, type);
+        if (x0 + x >= cols)
+          continue;
+        if (glyph(x, y))
+          s2banner_set_char(x0, y0, x, y, type);
       }
     }
   }
 
-  void s2banner_write_caret(banner_message_t const& message, int x0, int y0, bool set, int type) {
+  void s2banner_write_caret(banner_message_t const &message, int x0, int y0,
+                            bool set, int type) {
     x0 += std::max(0, (message.min_progress - 1 - s2banner_cell_width) / 2);
     for (int y = 0; y < s2banner_cell_height; y++) {
-      if (y0 + y >= rows) continue;
+      if (y0 + y >= rows)
+        continue;
       for (int x = 0; x < s2banner_cell_width - 1; x++) {
-        if (x0 + x >= cols) continue;
+        if (x0 + x >= cols)
+          continue;
         s2banner_set_char(x0, y0, x, y, set ? type : 0);
       }
     }
   }
 
-  void s2banner_put_char(int x0, int y0, int x, int y, int type, char32_t uchar) {
+  void s2banner_put_char(int x0, int y0, int x, int y, int type,
+                         char32_t uchar) {
     if (type == 0) {
-      cell_t& cell = layers[0].rcell(x0 + x, y0 + y);
+      cell_t &cell = layers[0].rcell(x0 + x, y0 + y);
       cell.c = ' ';
     } else if (type == 1) {
-      cell_t& cell = layers[0].rcell(x0 + x, y0 + y);
+      cell_t &cell = layers[0].rcell(x0 + x, y0 + y);
       cell.c = uchar;
       cell.birth = now;
       cell.power = 1.0;
@@ -1344,7 +1396,8 @@ private:
       thread.y = y0 + y;
       thread.age = 0;
       thread.speed = s2banner_cell_height - y;
-      if (thread.speed > 2) thread.speed += util::rand() % 3 - 1;
+      if (thread.speed > 2)
+        thread.speed += util::rand() % 3 - 1;
       thread.power = 2.0 / 3.0;
       thread.decay = 30;
       layers[1].add_thread(thread);
@@ -1370,7 +1423,7 @@ private:
     }
   }
 
-  void s2banner_show_message(banner_message_t& message, int mode) {
+  void s2banner_show_message(banner_message_t &message, int mode) {
     int nchar, display_width, display_height;
     switch (mode) {
     default:
@@ -1382,7 +1435,7 @@ private:
       break;
     case 1:
     case 2:
-      nchar = (int) message.text.size();
+      nchar = (int)message.text.size();
       display_width = mode * nchar;
       display_height = 1;
       break;
@@ -1395,13 +1448,15 @@ private:
     int loop_max = s2banner_initial_input + nchar * 5 + 130;
     for (int loop = 0; loop <= loop_max; loop++) {
       int type = 1;
-      if (loop == loop_max) type = 2;
+      if (loop == loop_max)
+        type = 2;
 
       int x0 = (cols - display_width) / 2, y0 = (rows - display_height) / 2;
       if (mode != 0 && util::rand() % 20 == 0)
         y0 += util::rand() % 7 - 3;
       for (int i = 0; i < nchar; i++) {
-        if ((loop - s2banner_initial_input) / 5 <= i) break;
+        if ((loop - s2banner_initial_input) / 5 <= i)
+          break;
 
         bool caret_moved = false;
         if (input_index < i) {
@@ -1411,21 +1466,19 @@ private:
         }
 
         switch (mode) {
-        case 0:
-          {
-            glyph_t const& g = message.glyphs[i];
-            if (caret_moved)
-              s2banner_write_caret(message, x0, y0, false, type);
-            s2banner_write_letter(x0, y0, g, type);
-            x0 += g.render_width;
-          }
-          break;
-        default:
-          {
-            char32_t c = message.text[i];
-            if (U'a' <= c && c <= U'z') c = c - U'a' + U'A';
-            s2banner_put_char(x0, y0, 0, 0, type, c);
-          }
+        case 0: {
+          glyph_t const &g = message.glyphs[i];
+          if (caret_moved)
+            s2banner_write_caret(message, x0, y0, false, type);
+          s2banner_write_letter(x0, y0, g, type);
+          x0 += g.render_width;
+        } break;
+        default: {
+          char32_t c = message.text[i];
+          if (U'a' <= c && c <= U'z')
+            c = c - U'a' + U'A';
+          s2banner_put_char(x0, y0, 0, 0, type, c);
+        }
           x0 += mode;
           break;
         }
@@ -1435,8 +1488,9 @@ private:
       case 0:
         // if (!((loop - input_time) / 25 & 1))
         //   s2banner_write_caret(message, x0, y0, true);
-        s2banner_write_caret(message, x0, y0, !((loop - input_time) / 25 & 1), type);
-        //s2banner_write_caret(message, x0, y0, true);
+        s2banner_write_caret(message, x0, y0, !((loop - input_time) / 25 & 1),
+                             type);
+        // s2banner_write_caret(message, x0, y0, true);
         break;
       default:
         s2banner_put_char(x0, y0, 0, 0, type, U'\u2589');
@@ -1447,12 +1501,14 @@ private:
       render_layers();
       next_frame();
       kreader.process();
-      if (is_menu) return;
+      if (is_menu)
+        return;
     }
   }
+
 public:
 public:
-  void s2banner_add_message(std::string const& message) {
+  void s2banner_add_message(std::string const &message) {
     banner.add_message(message);
   }
   void s2banner() {
@@ -1466,7 +1522,7 @@ public:
       mode = 2;
     }
 
-    for (banner_message_t& message: banner)
+    for (banner_message_t &message : banner)
       s2banner_show_message(message, mode);
   }
 
@@ -1477,7 +1533,7 @@ private:
     s4conway_board.set_transform(scal, theta);
     for (int y = 0; y < rows; y++) {
       for (int x = 0; x < cols; x++) {
-        cell_t& cell = layers[2].rcell(x, y);
+        cell_t &cell = layers[2].rcell(x, y);
         switch (s4conway_board.get_pixel(x, y, power)) {
         case 1:
           cell.c = util::rand_char();
@@ -1500,6 +1556,7 @@ private:
       }
     }
   }
+
 public:
   void s4conway() {
     s4conway_board.initialize();
@@ -1511,11 +1568,13 @@ public:
       distance += 1.0 * (loop > 1500 ? distance * 0.01 : 0.04);
       time += 0.005 * distance;
       s4conway_board.step(time);
-      s4conway_frame(0.5 + loop * 0.01, 0.01 * distance, std::min(0.8, 3.0 / std::sqrt(distance)));
+      s4conway_frame(0.5 + loop * 0.01, 0.01 * distance,
+                     std::min(0.8, 3.0 / std::sqrt(distance)));
       render_layers();
       next_frame();
       kreader.process();
-      if (is_menu) return;
+      if (is_menu)
+        return;
     }
   }
 
@@ -1526,7 +1585,7 @@ private:
     s5mandel_data.update_frame(theta, scale);
     for (int y = 0; y < rows; y++) {
       for (int x = 0; x < cols; x++) {
-        cell_t& cell = layers[1].rcell(x, y);
+        cell_t &cell = layers[1].rcell(x, y);
         double const power = s5mandel_data(x, y);
         if (power < 0.05) {
           cell.c = ' ';
@@ -1559,13 +1618,15 @@ public:
       render_layers();
       next_frame();
       kreader.process();
-      if (is_menu) return;
+      if (is_menu)
+        return;
     }
     for (loop = 0; loop < 100; loop++) {
       render_layers();
       next_frame();
       kreader.process();
-      if (is_menu) return;
+      if (is_menu)
+        return;
     }
 
     set_twinkle(default_twinkle);
@@ -1601,14 +1662,14 @@ private:
       break;
     }
   }
-  void menu_frame_draw_string(int y0, scene_t scene, const char* name) {
+  void menu_frame_draw_string(int y0, scene_t scene, const char *name) {
     std::size_t const len = std::strlen(name);
     int const progress = 2;
     int const x0 = (cols - len * progress) / 2;
     double const power = scene == menu_index ? 1.0 : 0.5;
     double const flags = scene == menu_index ? 0 : cflag_disable_bold;
     for (std::size_t i = 0; i < len; i++) {
-      cell_t& cell = layers[0].rcell(x0 + i * progress, y0);
+      cell_t &cell = layers[0].rcell(x0 + i * progress, y0);
       cell.c = std::toupper(name[i]);
       cell.birth = now;
       cell.power = power;
@@ -1616,25 +1677,31 @@ private:
       cell.flags = flags;
     }
   }
+
 public:
   int show_menu() {
     while (is_menu) {
       int const line_height = std::clamp(rows / scene_count, 1, 3);
       int const y0 = (rows - scene_count * line_height) / 2;
       int i = 0;
-      menu_frame_draw_string(y0 + i++ * line_height, scene_number      , "Number falls");
-      menu_frame_draw_string(y0 + i++ * line_height, scene_banner      , "Banner");
-      menu_frame_draw_string(y0 + i++ * line_height, scene_rain        , "Matrix rain");
-      menu_frame_draw_string(y0 + i++ * line_height, scene_conway      , "Conway's Game of Life");
-      menu_frame_draw_string(y0 + i++ * line_height, scene_mandelbrot  , "Mandelbrot set");
-      menu_frame_draw_string(y0 + i++ * line_height, scene_rain_forever, "Rain forever");
-      menu_frame_draw_string(y0 + i++ * line_height, scene_exit        , "Exit");
+      menu_frame_draw_string(y0 + i++ * line_height, scene_number,
+                             "Number falls");
+      menu_frame_draw_string(y0 + i++ * line_height, scene_banner, "Banner");
+      menu_frame_draw_string(y0 + i++ * line_height, scene_rain, "Matrix rain");
+      menu_frame_draw_string(y0 + i++ * line_height, scene_conway,
+                             "Conway's Game of Life");
+      menu_frame_draw_string(y0 + i++ * line_height, scene_mandelbrot,
+                             "Mandelbrot set");
+      menu_frame_draw_string(y0 + i++ * line_height, scene_rain_forever,
+                             "Rain forever");
+      menu_frame_draw_string(y0 + i++ * line_height, scene_exit, "Exit");
 
       s2banner_add_thread(1, 5000);
       render_layers();
       next_frame();
       kreader.process();
-      if (!is_menu) break;
+      if (!is_menu)
+        break;
     }
 
     return menu_index;
@@ -1674,12 +1741,8 @@ public:
 
 buffer buff;
 
-void trapint(int) {
-  buff.notify_sigint();
-}
-void trapwinch(int) {
-  buff.notify_winch();
-}
+void trapint(int) { buff.notify_sigint(); }
+void trapwinch(int) { buff.notify_winch(); }
 
 #ifdef SIGTSTP
 void traptstp(int sig) {
@@ -1703,69 +1766,85 @@ struct arguments {
   bool flag_help = false;
 
 public:
-  void print_help(std::FILE* file) {
-    std::fprintf(file,
-      "cxxmatrix (C++ Matrix)\n"
-      "usage: cxxmatrix [OPTIONS...] [[--] MESSAGE...]\n"
-      "\n"
-      "MESSAGE\n"
-      "   Add a message for 'banner' scene.  When no messages are specified, a\n"
-      "   message \"C++ MATRIX\" will be used.\n"
-      "\n"
-      //------------------------------------------------------------------------------
-      "OPTIONS\n"
-      "   --help      Show help.\n"
-      "   --          The rest arguments are processed as MESSAGE.\n"
-      "   -m, --message=MESSAGE\n"
-      "               Add a message for 'banner' scene.\n"
-      "   -s, --scene=SCENE\n"
-      "               Add scenes. Comma separated list of 'number', 'banner', 'rain',\n"
-      "               'conway', 'mandelbrot', 'rain-forever' and 'loop'.\n"
-      "   -c, --color=COLOR\n"
-      "               Set color. One of 'default', 'black', 'red', 'green', 'yellow',\n"
-      "               'blue', 'magenta', 'cyan', 'white', integer 0-255 (256 index\n"
-      "               color), '#RGB', and '#RRGGBB'.\n"
-      "   --colorspace=COLORSPACE\n"
-      "               Set colorspace. One of 'default'/'xterm-256'/'256',\n"
-      "               'ansi-8'/'8', 'aix-16'/'16', 'xterm-88'/'88', 'xterm-rgb',\n"
-      "               'iso-rgb'/'rgb', 'iso-cmy'/'cmy', 'iso-cmyk'/'cmyk', or\n"
-      "               'iso-index'/'index'.\n"
-      "   --frame-rate=NUM\n"
-      "               Set the frame rate per second.  A positive number less than or\n"
-      "               equal to 1000.  The default is 25.\n"
-      "   --error-rate=NUM\n"
-      "               Set the factor for the rate of character changes.  A\n"
-      "               non-negative number.  The default is 1.0.\n"
-      "   --diffuse\n"
-      "   --no-diffuse\n"
-      "               Turn on/off the background-color effect.  Turned on by default.\n"
-      "   --twinkle\n"
-      "   --no-twinkle\n"
-      "               Turn on/off the twinkling effect.  Turned on by default.\n"
-      "   --preserve-background\n"
-      "   --no-preserve-background\n"
-      "               Preserve terminal background or not.  Not preserve by default.\n"
-      "   --rain-density=NUM\n"
-      "               Set the factor for the density of rain drops.  A positive\n"
-      "               number.  The default is 1.0.\n"
-      "\n"
-      "Keyboard\n"
-      "   C-c (SIGINT), q, Q  Quit\n"
+  void print_help(std::FILE *file) {
+    std::fprintf(
+        file,
+        "cxxmatrix (C++ Matrix)\n"
+        "usage: cxxmatrix [OPTIONS...] [[--] MESSAGE...]\n"
+        "\n"
+        "MESSAGE\n"
+        "   Add a message for 'banner' scene.  When no messages are specified, "
+        "a\n"
+        "   message \"C++ MATRIX\" will be used.\n"
+        "\n"
+        //------------------------------------------------------------------------------
+        "OPTIONS\n"
+        "   --help      Show help.\n"
+        "   --          The rest arguments are processed as MESSAGE.\n"
+        "   -m, --message=MESSAGE\n"
+        "               Add a message for 'banner' scene.\n"
+        "   -s, --scene=SCENE\n"
+        "               Add scenes. Comma separated list of 'number', "
+        "'banner', 'rain',\n"
+        "               'conway', 'mandelbrot', 'rain-forever' and 'loop'.\n"
+        "   -i, --intro=SCENE\n"
+        "               Add intros. Comma separated list of 'number', "
+        "'banner', 'rain',\n"
+        "               'conway', and 'mandelbrot'.\n"
+        "   -c, --color=COLOR\n"
+        "               Set color. One of 'default', 'black', 'red', 'green', "
+        "'yellow',\n"
+        "               'blue', 'magenta', 'cyan', 'white', integer 0-255 (256 "
+        "index\n"
+        "               color), '#RGB', and '#RRGGBB'.\n"
+        "   --colorspace=COLORSPACE\n"
+        "               Set colorspace. One of 'default'/'xterm-256'/'256',\n"
+        "               'ansi-8'/'8', 'aix-16'/'16', 'xterm-88'/'88', "
+        "'xterm-rgb',\n"
+        "               'iso-rgb'/'rgb', 'iso-cmy'/'cmy', 'iso-cmyk'/'cmyk', "
+        "or\n"
+        "               'iso-index'/'index'.\n"
+        "   --frame-rate=NUM\n"
+        "               Set the frame rate per second.  A positive number less "
+        "than or\n"
+        "               equal to 1000.  The default is 25.\n"
+        "   --error-rate=NUM\n"
+        "               Set the factor for the rate of character changes.  A\n"
+        "               non-negative number.  The default is 1.0.\n"
+        "   --diffuse\n"
+        "   --no-diffuse\n"
+        "               Turn on/off the background-color effect.  Turned on by "
+        "default.\n"
+        "   --twinkle\n"
+        "   --no-twinkle\n"
+        "               Turn on/off the twinkling effect.  Turned on by "
+        "default.\n"
+        "   --preserve-background\n"
+        "   --no-preserve-background\n"
+        "               Preserve terminal background or not.  Not preserve by "
+        "default.\n"
+        "   --rain-density=NUM\n"
+        "               Set the factor for the density of rain drops.  A "
+        "positive\n"
+        "               number.  The default is 1.0.\n"
+        "\n"
+        "Keyboard\n"
+        "   C-c (SIGINT), q, Q  Quit\n"
 #ifdef SIGTSTP
-      "   C-z (SIGTSTP)       Suspend\n"
+        "   C-z (SIGTSTP)       Suspend\n"
 #endif
-      "   C-m, RET            Show menu\n"
-      "\n"
-    );
+        "   C-m, RET            Show menu\n"
+        "\n");
   }
+
 private:
   int argc;
-  char** argv;
+  char **argv;
   int iarg;
-  char const* arg;
-  char const* get_optarg(char c) {
+  char const *arg;
+  char const *get_optarg(char c) {
     if (*arg) {
-      char const* ret = arg;
+      char const *ret = arg;
       arg = "";
       return ret;
     } else if (iarg < argc) {
@@ -1777,11 +1856,13 @@ private:
     }
   }
 
-  char const* longopt_arg;
-  bool is_longopt(const char* name) {
-    const char* p = arg;
-    while (*name && *name == *p) p++, name++;
-    if (*name) return false;
+  char const *longopt_arg;
+  bool is_longopt(const char *name) {
+    const char *p = arg;
+    while (*name && *name == *p)
+      p++, name++;
+    if (*name)
+      return false;
     if (*p == '=') {
       longopt_arg = p + 1;
       return true;
@@ -1792,13 +1873,14 @@ private:
       return false;
     }
   }
-  char const* get_longoptarg() {
+  char const *get_longoptarg() {
     if (longopt_arg) {
       return longopt_arg;
     } else if (iarg < argc) {
       return argv[iarg++];
     } else {
-      std::fprintf(stderr, "cxxmatrix: missing option argument for \"--%s\"\n", arg);
+      std::fprintf(stderr, "cxxmatrix: missing option argument for \"--%s\"\n",
+                   arg);
       flag_error = true;
       return nullptr;
     }
@@ -1806,17 +1888,20 @@ private:
 
 public:
   std::vector<std::string> messages;
+
 private:
-  void push_message(const char* message) {
-    messages.push_back(message);
-  }
+  void push_message(const char *message) { messages.push_back(message); }
 
 public:
   std::vector<scene_t> scenes;
+
+public:
+  std::vector<scene_t> intros;
+
 private:
-  void push_scene(const char* scene) {
+  void push_scene(const char *scene) {
     std::vector<std::string_view> names = util::split(scene, ',');
-    for (auto const& name: names) {
+    for (auto const &name : names) {
       if (name == "number") {
         scenes.push_back(scene_number);
       } else if (name == "banner") {
@@ -1837,7 +1922,30 @@ private:
       } else if (name == "rain-forever") {
         scenes.push_back(scene_rain_forever);
       } else {
-        std::fprintf(stderr, "cxxxmatrix: unknown value for scene (%.*s)\n", (int) name.size(), name.data());
+        std::fprintf(stderr, "cxxxmatrix: unknown value for scene (%.*s)\n",
+                     (int)name.size(), name.data());
+        flag_error = true;
+      }
+    }
+  }
+
+private:
+  void push_intro(const char *scene) {
+    std::vector<std::string_view> names = util::split(scene, ',');
+    for (auto const &name : names) {
+      if (name == "number") {
+        intros.push_back(scene_number);
+      } else if (name == "banner") {
+        intros.push_back(scene_banner);
+      } else if (name == "conway") {
+        intros.push_back(scene_conway);
+      } else if (name == "rain") {
+        intros.push_back(scene_rain);
+      } else if (name == "mandelbrot") {
+        intros.push_back(scene_mandelbrot);
+      } else {
+        std::fprintf(stderr, "cxxxmatrix: unknown value for intro (%.*s)\n",
+                     (int)name.size(), name.data());
         flag_error = true;
       }
     }
@@ -1858,7 +1966,7 @@ private:
     else
       return -1;
   }
-  void set_color(const char* color_name) {
+  void set_color(const char *color_name) {
     std::string_view view = color_name;
     if (view == "black") {
       this->color = index2color(0);
@@ -1887,7 +1995,8 @@ private:
     } else if (view == "default") {
       this->color = index2color(47);
       return;
-    } else if (view[0] == '#' && std::all_of(view.begin() + 1, view.end(), (int(*)(int)) std::isxdigit)) {
+    } else if (view[0] == '#' && std::all_of(view.begin() + 1, view.end(),
+                                             (int (*)(int))std::isxdigit)) {
       int r = -1, g = -1, b = -1;
       if (view.size() == 4) {
         r = xdigit2i(view[1]) * 0x11;
@@ -1910,10 +2019,11 @@ private:
       }
     }
 
-    std::fprintf(stderr, "cxxmatrix: invalid value for color (%s)\n", view.data());
+    std::fprintf(stderr, "cxxmatrix: invalid value for color (%s)\n",
+                 view.data());
     flag_error = true;
   }
-  void set_colorspace(const char* name) {
+  void set_colorspace(const char *name) {
     std::string_view view = name;
     if (view == "ansi-8" || view == "8") {
       this->colorspace = colorspace_ansi_8;
@@ -1958,8 +2068,9 @@ public:
   double frame_rate = 25;
   double error_rate = 1.0;
   double rain_density = 1.0;
+
 private:
-  void set_frame_rate(const char* frame_rate_text) {
+  void set_frame_rate(const char *frame_rate_text) {
     if (std::isdigit(frame_rate_text[0])) {
       double const value = std::atof(frame_rate_text);
       if (0.0 < value && value <= 1000.0) {
@@ -1968,10 +2079,13 @@ private:
       }
     }
 
-    std::fprintf(stderr, "cxxmatrix: the frame rate (%s) needs to be a positive number <= 1000.0.\n", frame_rate_text);
+    std::fprintf(stderr,
+                 "cxxmatrix: the frame rate (%s) needs to be a positive number "
+                 "<= 1000.0.\n",
+                 frame_rate_text);
     flag_error = true;
   }
-  void set_error_rate(const char* error_rate_text) {
+  void set_error_rate(const char *error_rate_text) {
     if (std::isdigit(error_rate_text[0])) {
       double const value = std::atof(error_rate_text);
       if (0.0 <= value) {
@@ -1980,10 +2094,13 @@ private:
       }
     }
 
-    std::fprintf(stderr, "cxxmatrix: the error rate (%s) needs to be a non-negative number.\n", error_rate_text);
+    std::fprintf(
+        stderr,
+        "cxxmatrix: the error rate (%s) needs to be a non-negative number.\n",
+        error_rate_text);
     flag_error = true;
   }
-  void set_rain_density(const char* rain_density_text) {
+  void set_rain_density(const char *rain_density_text) {
     if (std::isdigit(rain_density_text[0])) {
       double const value = std::atof(rain_density_text);
       if (0.0 < value) {
@@ -1992,12 +2109,15 @@ private:
       }
     }
 
-    std::fprintf(stderr, "cxxmatrix: the rain density (%s) needs to be a positive number.\n", rain_density_text);
+    std::fprintf(
+        stderr,
+        "cxxmatrix: the rain density (%s) needs to be a positive number.\n",
+        rain_density_text);
     flag_error = true;
   }
 
 public:
-  bool process(int argc, char** argv) {
+  bool process(int argc, char **argv) {
     bool flag_literal = false;
     this->argc = argc;
     this->argv = argv;
@@ -2037,8 +2157,11 @@ public:
             set_error_rate(get_longoptarg());
           } else if (is_longopt("rain-density")) {
             set_rain_density(get_longoptarg());
+          } else if (is_longopt("rain-density")) {
+            push_intro(get_longoptarg());
           } else {
-            std::fprintf(stderr, "cxxmatrix: unknown long option (--%s)\n", arg);
+            std::fprintf(stderr, "cxxmatrix: unknown long option (--%s)\n",
+                         arg);
             flag_error = true;
           }
         } else {
@@ -2046,15 +2169,19 @@ public:
           while (char const c = *arg++) {
             switch (c) {
             case 'm':
-              if (char const* opt = get_optarg(c))
+              if (char const *opt = get_optarg(c))
                 push_message(opt);
               break;
             case 's':
-              if (char const* opt = get_optarg(c))
+              if (char const *opt = get_optarg(c))
                 push_scene(opt);
               break;
+            case 'i':
+              if (char const *opt = get_optarg(c))
+                push_intro(opt);
+              break;
             case 'c':
-              if (char const* opt = get_optarg(c))
+              if (char const *opt = get_optarg(c))
                 set_color(opt);
               break;
             default:
@@ -2070,14 +2197,13 @@ public:
     }
     return !flag_error;
   }
-  arguments(int argc, char** argv) {
-    this->process(argc, argv);
-  }
+  arguments(int argc, char **argv) { this->process(argc, argv); }
 };
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   arguments args(argc, argv);
-  if (args.flag_error) return 2;
+  if (args.flag_error)
+    return 2;
   if (args.flag_help) {
     args.print_help(stdout);
     return 0;
@@ -2092,7 +2218,7 @@ int main(int argc, char** argv) {
     args.scenes.push_back(scene_rain_forever);
   }
   if (args.messages.size()) {
-    for (std::string const& msg: args.messages)
+    for (std::string const &msg : args.messages)
       buff.s2banner_add_message(msg);
   } else {
     buff.s2banner_add_message("C++ Matrix");
@@ -2111,23 +2237,48 @@ int main(int argc, char** argv) {
   buff.initialize();
   buff.term_enter();
   std::size_t index = 0;
+
+  // might be able to combine this conditional and the while loop.
+  // if (!args.intros.empty()) {
+    while (index < args.intros.size() && !args.intros.empty()) { // maybe add '&& !args.intro.empty()'
+                                         // to while loop condition.
+      scene_t const scene = args.intros[index++];
+      switch (scene) {
+      case scene_none:
+        break;
+      case scene_loop:
+        break;
+      default:
+        buff.scene(scene);
+        break;
+      }
+
+      if (buff.is_menu)
+        break;
+    }
+  // }
+
   while (index < args.scenes.size()) {
     scene_t const scene = args.scenes[index++];
     switch (scene) {
-    case scene_none: break;
-    case scene_loop: index = 0; break;
+    case scene_none:
+      break;
+    case scene_loop:
+      index = 0;
+      break;
     default:
       buff.scene(scene);
       break;
     }
 
-    if (buff.is_menu) break;
+    if (buff.is_menu)
+      break;
   }
 
   if (buff.is_menu) {
     for (;;) {
       buff.is_menu = true;
-      scene_t const scene = (scene_t) buff.show_menu();
+      scene_t const scene = (scene_t)buff.show_menu();
       buff.scene(scene);
     }
   }
