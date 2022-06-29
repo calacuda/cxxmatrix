@@ -2240,22 +2240,23 @@ int main(int argc, char **argv) {
 
   // might be able to combine this conditional and the while loop.
   // if (!args.intros.empty()) {
-    while (index < args.intros.size() && !args.intros.empty()) { // maybe add '&& !args.intro.empty()'
-                                         // to while loop condition.
-      scene_t const scene = args.intros[index++];
-      switch (scene) {
-      case scene_none:
-        break;
-      case scene_loop:
-        break;
-      default:
-        buff.scene(scene);
-        break;
-      }
-
-      if (buff.is_menu)
-        break;
+  while (index < args.intros.size() &&
+         !args.intros.empty()) { // maybe add '&& !args.intro.empty()'
+                                 // to while loop condition.
+    scene_t const scene = args.intros[index++];
+    switch (scene) {
+    case scene_none:
+      break;
+    case scene_loop:
+      break;
+    default:
+      buff.scene(scene);
+      break;
     }
+
+    if (buff.is_menu)
+      break;
+  }
   // }
 
   while (index < args.scenes.size()) {
