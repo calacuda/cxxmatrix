@@ -1,5 +1,17 @@
 # C++ Matrix in terminal
 
+This is a fork of the [original](https://github.com/akinomyoga/cxxmatrix). All I did was add a command line flag for an intro. This way the user can display some scenes before the main body of the scenes. Motivation being I can now run the 'number' scene only once at the start, then loop over other scenes for the rest of the execution.
+
+Example:
+~~~
+# ./cxxmatrix -i number -s banner,rain,loop -m "MESSAGE".
+~~~
+
+This will loop over the scenes `banner,rain,loop`, BUT will only display `number` once.
+
+the rest of this file is verbatim from the original.
+---
+
 I wrote a simple terminal program of Matrix digital rain.
 A part of the purpose of this program is to test the performance of terminal emulators.
 Another purpose is just for fun.

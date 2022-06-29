@@ -2236,14 +2236,11 @@ int main(int argc, char **argv) {
 
   buff.initialize();
   buff.term_enter();
-  std::size_t index = 0;
+  std::size_t intro_index = 0;
+  std::size_t scene_index = 0;
 
-  // might be able to combine this conditional and the while loop.
-  // if (!args.intros.empty()) {
-  while (index < args.intros.size() &&
-         !args.intros.empty()) { // maybe add '&& !args.intro.empty()'
-                                 // to while loop condition.
-    scene_t const scene = args.intros[index++];
+  while (intro_index < args.intros.size() && !args.intros.empty()) {
+    scene_t const scene = args.intros[intro_index++];
     switch (scene) {
     case scene_none:
       break;
@@ -2257,15 +2254,14 @@ int main(int argc, char **argv) {
     if (buff.is_menu)
       break;
   }
-  // }
 
-  while (index < args.scenes.size()) {
-    scene_t const scene = args.scenes[index++];
+  while (scene_index < args.scenes.size()) {
+    scene_t const scene = args.scenes[scene_index++];
     switch (scene) {
     case scene_none:
       break;
     case scene_loop:
-      index = 0;
+      scene_index = 0;
       break;
     default:
       buff.scene(scene);
